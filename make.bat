@@ -9,5 +9,5 @@ set ICO_DIR=resources/pes_indie.ico
 pyinstaller --onefile --window "%PY_FILE%" --name "%PROJECT_NAME%_%VERSION%"  %EXTRA_ARG% --version-file "%FILE_VERSION%"
 
 cd dist
-tar -acvf "%PROJECT_NAME%_%VERSION%.zip"
+tar -acvf "%PROJECT_NAME%_%VERSION%.zip" *
 pause

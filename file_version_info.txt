@@ -36,7 +36,7 @@ StringFileInfo(
     StringStruct(u'LegalCopyright', u'Copyright (c) PES Indie Team'),
     StringStruct(u'OriginalFilename', u'Mini Kit Creator.exe'),
     StringStruct(u'ProductName', u'Subversion'),
-    StringStruct(u'ProductVersion', u'1.0.0 (r220911)')])
+    StringStruct(u'ProductVersion', u'1.0.0 (r220919)')])
   ]), 
 VarFileInfo([VarStruct(u'Translation', [1033, 1200])])
   ]
