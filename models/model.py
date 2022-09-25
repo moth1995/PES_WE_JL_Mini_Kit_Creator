@@ -15,6 +15,8 @@ class Model():
     def make_old_style(self, mini_kit:MiniKit, output_dir:str, borders:bool, kit_3d_ver:int):
         if output_dir == "": raise Exception("You must select first the output directory")
         if kit_3d_ver == 0: mini_kit.pes2013_kit()
+        elif kit_3d_ver == 1: mini_kit.we10_kit()
+        else: raise Exception("Unsuported input version")
         base_kit_2d = Image.open(self.resource_path("resources/old_style_kit_2d.png"))
         mini_kit.rotate_kits(0)
         mini_kit.resize_kits(0)
@@ -26,6 +28,8 @@ class Model():
     def make_new_style(self, mini_kit:MiniKit, output_dir:str, borders:bool, kit_3d_ver:int):
         if output_dir == "": raise Exception("You must select first the output directory")
         if kit_3d_ver == 0: mini_kit.pes2013_kit()
+        elif kit_3d_ver == 1: mini_kit.we10_kit()
+        else: raise Exception("Unsuported input version")
         base_kit_2d = Image.open(self.resource_path("resources/new_style_kit_2d_128x128.png"))
         mini_kit.rotate_kits(1)
         mini_kit.resize_kits(1)
@@ -69,12 +73,12 @@ class Model():
     def select_output_dir(self, root):
         return filedialog.askdirectory(parent=root, initialdir=".",title="Please select a directory")
     
-    def make_mini_kits(self, pa_3d: Image.Image, pb_3d: Image.Image, mini_kit_style_version:int, output_dir:str):
+    def make_mini_kits(self, pa_3d: Image.Image, pb_3d: Image.Image, mini_kit_style_version:int, output_dir:str, input_ver:int):
             mini_kit = MiniKit(pa_3d, pb_3d)
             if mini_kit_style_version == 0:
-                self.make_old_style(mini_kit, output_dir, True, 0)
+                self.make_old_style(mini_kit, output_dir, True, input_ver)
             elif mini_kit_style_version == 1:
-                self.make_new_style(mini_kit, output_dir, True, 0)
+                self.make_new_style(mini_kit, output_dir, True, input_ver)
     
     def create_output_folder(self, folder):
         if not os.path.exists(folder):

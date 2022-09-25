@@ -8,6 +8,7 @@ class Controller():
     output_dir = ""
     kit_input_supported_versions = [
         "PES 2013",
+        "PES 5 / WE 10"
     ]
     mini_kit_output_supported_versions = [
         "Old Style",
@@ -39,6 +40,7 @@ class Controller():
         dropped_data = self.view.tk.splitlist(event.data)
         type_of_dropped_files = self.model.verify_dropped_files(dropped_data)
 
+        kit_3d_input_ver = self.view.input_kit_cmb_ver.current()
         mini_kit_style_version = self.view.mini_kit_out_ver_cmb.current()
 
         if type_of_dropped_files == "Folder":
@@ -48,9 +50,8 @@ class Controller():
                 pa_3d = self.model.check_kit_dimensions(Image.open(folder + "\\pa\\kit.png"))
                 pb_3d = self.model.check_kit_dimensions(Image.open(folder + "\\pb\\kit.png"))
                 minikit_output_folder = self.output_dir + "\\" + os.path.basename(os.path.normpath(folder))
-                print(minikit_output_folder)
                 self.model.create_output_folder(minikit_output_folder)
-                self.model.make_mini_kits(pa_3d, pb_3d, mini_kit_style_version, minikit_output_folder)
+                self.model.make_mini_kits(pa_3d, pb_3d, mini_kit_style_version, minikit_output_folder, kit_3d_input_ver)
             messagebox.showinfo(
                 self.view.appname, 
                 f"All files converted and saved at {self.output_dir}!"
@@ -58,7 +59,7 @@ class Controller():
         elif type_of_dropped_files == "Files":
             pa_3d = self.model.check_kit_dimensions(Image.open(dropped_data[0]))
             pb_3d = self.model.check_kit_dimensions(Image.open(dropped_data[1]))
-            self.model.make_mini_kits(pa_3d, pb_3d, mini_kit_style_version, self.output_dir)
+            self.model.make_mini_kits(pa_3d, pb_3d, mini_kit_style_version, self.output_dir, kit_3d_input_ver)
             messagebox.showinfo(
                 self.view.appname, 
                 f"All files converted and saved at {self.output_dir}!"
