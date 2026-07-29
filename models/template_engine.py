@@ -1,10 +1,9 @@
 from __future__ import annotations
 
-import copy
 import os
 import re
 from pathlib import Path
-from typing import Any, Dict, Iterable, Mapping
+from typing import Any, Dict, Mapping
 
 import yaml
 from PIL import Image
@@ -42,15 +41,10 @@ def _as_int_tuple(value: Any, length: int, name: str) -> tuple:
 
 def _resampling(value: str | None):
     value = value or "nearest"
-    names = {
-        "nearest": "NEAREST",
-        "bilinear": "BILINEAR",
-        "bicubic": "BICUBIC",
-        "lanczos": "LANCZOS",
-    }
+    names = {"nearest": "NEAREST", "bilinear": "BILINEAR", "bicubic": "BICUBIC", "lanczos": "LANCZOS"}
     try:
         name = names[value.lower()]
-    except KeyError as exc:
+    except (AttributeError, KeyError) as exc:
         raise TemplateError(f"Unsupported resample value: {value}") from exc
     resampling = getattr(Image, "Resampling", Image)
     return getattr(resampling, name)
@@ -86,8 +80,6 @@ def _copy_image(source: Image.Image, **_: Any) -> Image.Image:
 
 
 def _new_image(*, mode: str, size: Any, color: Any, **_: Any) -> Image.Image:
-    if not isinstance(mode, str):
-        raise TemplateError("new-image mode must be a string")
     return Image.new(mode=mode, size=_as_int_tuple(size, 2, "new-image size"), color=color)
 
 
@@ -150,6 +142,27 @@ HANDLERS = {
 }
 
 
+def _normalize_command(command: Any, location: str) -> tuple[str, dict]:
+    """Accept the concise ``- paste:`` form and the legacy ``command: paste`` form."""
+    if not isinstance(command, dict):
+        raise TemplateError(f"{location} must be a mapping")
+
+    if "command" in command:
+        name = command.get("command")
+        options = {key: value for key, value in command.items() if key != "command"}
+    elif len(command) == 1:
+        name, options = next(iter(command.items()))
+        options = {} if options is None else options
+        if not isinstance(options, dict):
+            raise TemplateError(f"{location}.{name} must contain an options mapping")
+    else:
+        raise TemplateError(f"{location} must use exactly one command key, such as '- paste:'")
+
+    if name not in COMMAND_PARAMETERS:
+        raise TemplateError(f"{location} uses unsupported command: {name}")
+    return name, options
+
+
 class TemplateEngine:
     def __init__(self, template_dir: str | os.PathLike[str], resource_root: str | os.PathLike[str]):
         self.template_dir = Path(template_dir)
@@ -189,30 +202,26 @@ class TemplateEngine:
         if not isinstance(result_var, str) or not REFERENCE_RE.match("$" + result_var):
             raise TemplateError(f"{source}.result-var must be a valid variable name")
 
-        for index, command in enumerate(template["commands"]):
+        for index, raw_command in enumerate(template["commands"]):
             location = f"{source}.commands[{index}]"
-            if not isinstance(command, dict):
-                raise TemplateError(f"{location} must be a mapping")
-            name = command.get("command")
-            if name not in COMMAND_PARAMETERS:
-                raise TemplateError(f"{location} uses unsupported command: {name}")
-            unknown = set(command) - COMMAND_PARAMETERS[name] - {"command"}
+            name, command = _normalize_command(raw_command, location)
+            unknown = set(command) - COMMAND_PARAMETERS[name]
             if unknown:
-                raise TemplateError(f"{location} has unsupported parameters: {', '.join(sorted(unknown))}")
+                raise TemplateError(f"{location}.{name} has unsupported parameters: {', '.join(sorted(unknown))}")
             register_var = command.get("register-var")
             if not isinstance(register_var, str) or not REFERENCE_RE.match("$" + register_var):
-                raise TemplateError(f"{location}.register-var must be a valid variable name")
+                raise TemplateError(f"{location}.{name}.register-var must be a valid variable name")
             for key, value in command.items():
                 if isinstance(value, str) and value.startswith("$"):
                     match = REFERENCE_RE.match(value)
                     if not match:
-                        raise TemplateError(f"{location}.{key} is not a valid variable reference")
+                        raise TemplateError(f"{location}.{name}.{key} is not a valid variable reference")
                     if match.group(1) not in registered:
-                        raise TemplateError(f"{location}.{key} references undefined variable {value}")
+                        raise TemplateError(f"{location}.{name}.{key} references undefined variable {value}")
             if name == "flip" and command.get("direction") not in FLIP_DIRECTIONS:
-                raise TemplateError(f"{location}.direction must be horizontal or vertical")
+                raise TemplateError(f"{location}.flip.direction must be horizontal or vertical")
             if name == "composite" and command.get("mask-mode", "alpha") not in MASK_MODES:
-                raise TemplateError(f"{location}.mask-mode must be alpha or grayscale")
+                raise TemplateError(f"{location}.composite.mask-mode must be alpha or grayscale")
             registered.add(register_var)
         if result_var not in registered:
             raise TemplateError(f"{source}.result-var ${result_var} is never registered")
@@ -223,20 +232,19 @@ class TemplateEngine:
         except KeyError as exc:
             raise TemplateError(f"Unknown conversion template: {template_id}") from exc
         variables: Dict[str, Any] = {"pa": pa, "pb": pb, "output_dir": output_dir}
-        for index, command in enumerate(template["commands"]):
-            name = command["command"]
+        for index, raw_command in enumerate(template["commands"]):
+            name, command = _normalize_command(raw_command, f"commands[{index}]")
             args: Dict[str, Any] = {}
             for key, value in command.items():
-                if key in {"command", "register-var"}:
+                if key == "register-var":
                     continue
                 if isinstance(value, str) and value.startswith("$"):
-                    args[key.replace("-", "_")] = _reference(value, variables, f"commands[{index}].{key}")
+                    args[key.replace("-", "_")] = _reference(value, variables, f"commands[{index}].{name}.{key}")
                 else:
                     args[key.replace("-", "_")] = value
             if name == "load-image":
                 args["path"] = _resource_path(self.resource_root, args["path"])
-            result = HANDLERS[name](**args)
-            variables[command["register-var"]] = result
+            variables[command["register-var"]] = HANDLERS[name](**args)
         return variables[template["result-var"]]
 
     def choices(self) -> list[tuple[str, str]]:
