@@ -11,19 +11,61 @@ commands:
       size: [512, 256]
     register-var: pb
 
+  - new-image:
+      mode: RGBA
+      size: [128, 128]
+      color: [0, 0, 0, 0]
+    register-var: canvas
+
+  - crop:
+      source: $pa
+      box: [287, 83, 400, 155]
+  - rotate:
+      angle: 180
+  - rotate:
+      angle: -90
+      expand: true
+  - resize:
+      size: [14, 16]
+  - paste:
+      target: $canvas
+      position: [12, 9]
+    register-var: canvas
+
+  - crop:
+      source: $pa
+      box: [401, 83, 511, 155]
+  - rotate:
+      angle: 180
+  - rotate:
+      angle: -90
+      expand: true
+  - resize:
+      size: [14, 16]
+  - paste:
+      target: $canvas
+      position: [39, 9]
+    register-var: canvas
+
   - crop:
       source: $pa
       box: [40, 0, 142, 145]
   - resize:
       size: [26, 50]
-    register-var: pa_shirt
+  - paste:
+      target: $canvas
+      position: [20, 4]
+    register-var: canvas
 
   - crop:
       source: $pa
       box: [10, 145, 163, 256]
   - resize:
       size: [33, 26]
-    register-var: pa_short
+  - paste:
+      target: $canvas
+      position: [15, 54]
+    register-var: canvas
 
   - crop:
       source: $pa
@@ -31,9 +73,18 @@ commands:
   - resize:
       size: [12, 29]
     register-var: pa_socks
+  - paste:
+      target: $canvas
+      position: [39, 85]
+    register-var: canvas
+  - paste:
+      source: $pa_socks
+      target: $canvas
+      position: [14, 85]
+    register-var: canvas
 
   - crop:
-      source: $pa
+      source: $pb
       box: [287, 83, 400, 155]
   - rotate:
       angle: 180
@@ -42,10 +93,13 @@ commands:
       expand: true
   - resize:
       size: [14, 16]
-    register-var: pa_left_sleeve
+  - paste:
+      target: $canvas
+      position: [76, 9]
+    register-var: canvas
 
   - crop:
-      source: $pa
+      source: $pb
       box: [401, 83, 511, 155]
   - rotate:
       angle: 180
@@ -54,21 +108,30 @@ commands:
       expand: true
   - resize:
       size: [14, 16]
-    register-var: pa_right_sleeve
+  - paste:
+      target: $canvas
+      position: [103, 9]
+    register-var: canvas
 
   - crop:
       source: $pb
       box: [40, 0, 142, 145]
   - resize:
       size: [26, 50]
-    register-var: pb_shirt
+  - paste:
+      target: $canvas
+      position: [84, 4]
+    register-var: canvas
 
   - crop:
       source: $pb
       box: [10, 145, 163, 256]
   - resize:
       size: [33, 26]
-    register-var: pb_short
+  - paste:
+      target: $canvas
+      position: [80, 54]
+    register-var: canvas
 
   - crop:
       source: $pb
@@ -76,70 +139,13 @@ commands:
   - resize:
       size: [12, 29]
     register-var: pb_socks
-
-  - crop:
-      source: $pb
-      box: [287, 83, 400, 155]
-  - rotate:
-      angle: 180
-  - rotate:
-      angle: -90
-      expand: true
-  - resize:
-      size: [14, 16]
-    register-var: pb_left_sleeve
-
-  - crop:
-      source: $pb
-      box: [401, 83, 511, 155]
-  - rotate:
-      angle: 180
-  - rotate:
-      angle: -90
-      expand: true
-  - resize:
-      size: [14, 16]
-    register-var: pb_right_sleeve
-
-  - new-image:
-      mode: RGBA
-      size: [128, 128]
-      color: [0, 0, 0, 0]
   - paste:
-      source: $pa_left_sleeve
-      position: [12, 9]
-  - paste:
-      source: $pa_right_sleeve
-      position: [39, 9]
-  - paste:
-      source: $pa_shirt
-      position: [20, 4]
-  - paste:
-      source: $pa_short
-      position: [15, 54]
-  - paste:
-      source: $pa_socks
-      position: [39, 85]
-  - paste:
-      source: $pa_socks
-      position: [14, 85]
-  - paste:
-      source: $pb_left_sleeve
-      position: [76, 9]
-  - paste:
-      source: $pb_right_sleeve
-      position: [103, 9]
-  - paste:
-      source: $pb_shirt
-      position: [84, 4]
-  - paste:
-      source: $pb_short
-      position: [80, 54]
-  - paste:
-      source: $pb_socks
+      target: $canvas
       position: [103, 85]
+    register-var: canvas
   - paste:
       source: $pb_socks
+      target: $canvas
       position: [78, 85]
     register-var: output
 

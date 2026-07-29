@@ -11,125 +11,125 @@ commands:
       size: [512, 256]
     register-var: pb
 
-  - crop:
-      source: $pa
-      box: [40, 0, 154, 143]
-  - resize:
-      size: [28, 38]
-    register-var: pa_shirt
-
-  - crop:
-      source: $pa
-      box: [22, 143, 172, 256]
-  - resize:
-      size: [25, 25]
-    register-var: pa_short
-
-  - crop:
-      source: $pa
-      box: [413, 188, 511, 255]
-  - resize:
-      size: [19, 33]
-    register-var: pa_socks
-
-  - crop:
-      source: $pa
-      box: [432, 93, 512, 188]
-  - flip:
-      direction: horizontal
-  - rotate:
-      angle: -45
-      expand: true
-  - resize:
-      size: [18, 18]
-    register-var: pa_left_sleeve
-
-  - crop:
-      source: $pa
-      box: [432, 93, 512, 188]
-  - rotate:
-      angle: -135
-      expand: true
-  - resize:
-      size: [18, 18]
-    register-var: pa_right_sleeve
-
-  - crop:
-      source: $pb
-      box: [40, 0, 154, 143]
-  - resize:
-      size: [28, 38]
-    register-var: pb_shirt
-
-  - crop:
-      source: $pb
-      box: [22, 143, 172, 256]
-  - resize:
-      size: [25, 25]
-    register-var: pb_short
-
-  - crop:
-      source: $pb
-      box: [413, 188, 511, 255]
-  - resize:
-      size: [19, 33]
-    register-var: pb_socks
-
-  - crop:
-      source: $pb
-      box: [432, 93, 512, 188]
-  - flip:
-      direction: horizontal
-  - rotate:
-      angle: -45
-      expand: true
-  - resize:
-      size: [18, 18]
-    register-var: pb_left_sleeve
-
-  - crop:
-      source: $pb
-      box: [432, 93, 512, 188]
-  - rotate:
-      angle: -135
-      expand: true
-  - resize:
-      size: [18, 18]
-    register-var: pb_right_sleeve
-
   - new-image:
       mode: RGBA
       size: [128, 128]
       color: [0, 0, 0, 0]
+    register-var: canvas
+
+  - crop:
+      source: $pa
+      box: [432, 93, 512, 188]
+  - flip:
+      direction: horizontal
+  - rotate:
+      angle: -45
+      expand: true
+  - resize:
+      size: [18, 18]
   - paste:
-      source: $pa_left_sleeve
+      target: $canvas
       position: [29, 2]
+    register-var: canvas
+
+  - crop:
+      source: $pa
+      box: [432, 93, 512, 188]
+  - rotate:
+      angle: -135
+      expand: true
+  - resize:
+      size: [18, 18]
   - paste:
-      source: $pa_right_sleeve
+      target: $canvas
       position: [1, 2]
+    register-var: canvas
+
+  - crop:
+      source: $pa
+      box: [40, 0, 154, 143]
+  - resize:
+      size: [28, 38]
   - paste:
-      source: $pa_shirt
+      target: $canvas
       position: [10, 1]
+    register-var: canvas
+
+  - crop:
+      source: $pa
+      box: [22, 143, 172, 256]
+  - resize:
+      size: [25, 25]
   - paste:
-      source: $pa_short
+      target: $canvas
       position: [4, 42]
+    register-var: canvas
+
+  - crop:
+      source: $pa
+      box: [413, 188, 511, 255]
+  - resize:
+      size: [19, 33]
   - paste:
-      source: $pa_socks
+      target: $canvas
       position: [6, 75]
+    register-var: canvas
+
+  - crop:
+      source: $pb
+      box: [432, 93, 512, 188]
+  - flip:
+      direction: horizontal
+  - rotate:
+      angle: -45
+      expand: true
+  - resize:
+      size: [18, 18]
   - paste:
-      source: $pb_left_sleeve
+      target: $canvas
       position: [77, 2]
+    register-var: canvas
+
+  - crop:
+      source: $pb
+      box: [432, 93, 512, 188]
+  - rotate:
+      angle: -135
+      expand: true
+  - resize:
+      size: [18, 18]
   - paste:
-      source: $pb_right_sleeve
+      target: $canvas
       position: [47, 2]
+    register-var: canvas
+
+  - crop:
+      source: $pb
+      box: [40, 0, 154, 143]
+  - resize:
+      size: [28, 38]
   - paste:
-      source: $pb_shirt
+      target: $canvas
       position: [58, 1]
+    register-var: canvas
+
+  - crop:
+      source: $pb
+      box: [22, 143, 172, 256]
+  - resize:
+      size: [25, 25]
   - paste:
-      source: $pb_short
+      target: $canvas
       position: [36, 42]
+    register-var: canvas
+
+  - crop:
+      source: $pb
+      box: [413, 188, 511, 255]
+  - resize:
+      size: [19, 33]
   - paste:
-      source: $pb_socks
+      target: $canvas
       position: [39, 75]
     register-var: output
 
