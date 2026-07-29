@@ -10,187 +10,139 @@ commands:
       source: $pb
       size: [512, 256]
     register-var: pb
+
   - crop:
       source: $pa
       box: [40, 0, 142, 145]
+  - resize:
+      size: [26, 50]
     register-var: pa_shirt
+
   - crop:
       source: $pa
       box: [10, 145, 163, 256]
+  - resize:
+      size: [33, 26]
     register-var: pa_short
+
   - crop:
       source: $pa
       box: [370, 0, 489, 82]
+  - resize:
+      size: [12, 29]
     register-var: pa_socks
+
   - crop:
       source: $pa
       box: [287, 83, 400, 155]
+  - rotate:
+      angle: 180
+  - rotate:
+      angle: -90
+      expand: true
+  - resize:
+      size: [14, 16]
     register-var: pa_left_sleeve
+
   - crop:
       source: $pa
       box: [401, 83, 511, 155]
-    register-var: pa_right_sleeve
   - rotate:
-      source: $pa_left_sleeve
       angle: 180
-    register-var: pa_left_sleeve
   - rotate:
-      source: $pa_right_sleeve
-      angle: 180
+      angle: -90
+      expand: true
+  - resize:
+      size: [14, 16]
     register-var: pa_right_sleeve
+
   - crop:
       source: $pb
       box: [40, 0, 142, 145]
+  - resize:
+      size: [26, 50]
     register-var: pb_shirt
+
   - crop:
       source: $pb
       box: [10, 145, 163, 256]
+  - resize:
+      size: [33, 26]
     register-var: pb_short
+
   - crop:
       source: $pb
       box: [370, 0, 489, 82]
+  - resize:
+      size: [12, 29]
     register-var: pb_socks
+
   - crop:
       source: $pb
       box: [287, 83, 400, 155]
+  - rotate:
+      angle: 180
+  - rotate:
+      angle: -90
+      expand: true
+  - resize:
+      size: [14, 16]
     register-var: pb_left_sleeve
+
   - crop:
       source: $pb
       box: [401, 83, 511, 155]
-    register-var: pb_right_sleeve
   - rotate:
-      source: $pb_left_sleeve
       angle: 180
-    register-var: pb_left_sleeve
   - rotate:
-      source: $pb_right_sleeve
-      angle: 180
-    register-var: pb_right_sleeve
-  - rotate:
-      source: $pa_left_sleeve
       angle: -90
       expand: true
-    register-var: pa_left_sleeve
-  - rotate:
-      source: $pa_right_sleeve
-      angle: -90
-      expand: true
-    register-var: pa_right_sleeve
-  - rotate:
-      source: $pb_left_sleeve
-      angle: -90
-      expand: true
-    register-var: pb_left_sleeve
-  - rotate:
-      source: $pb_right_sleeve
-      angle: -90
-      expand: true
-    register-var: pb_right_sleeve
   - resize:
-      source: $pa_shirt
-      size: [26, 50]
-    register-var: pa_shirt
-  - resize:
-      source: $pa_short
-      size: [33, 26]
-    register-var: pa_short
-  - resize:
-      source: $pa_socks
-      size: [12, 29]
-    register-var: pa_socks
-  - resize:
-      source: $pa_left_sleeve
-      size: [14, 16]
-    register-var: pa_left_sleeve
-  - resize:
-      source: $pa_right_sleeve
-      size: [14, 16]
-    register-var: pa_right_sleeve
-  - resize:
-      source: $pb_shirt
-      size: [26, 50]
-    register-var: pb_shirt
-  - resize:
-      source: $pb_short
-      size: [33, 26]
-    register-var: pb_short
-  - resize:
-      source: $pb_socks
-      size: [12, 29]
-    register-var: pb_socks
-  - resize:
-      source: $pb_left_sleeve
-      size: [14, 16]
-    register-var: pb_left_sleeve
-  - resize:
-      source: $pb_right_sleeve
       size: [14, 16]
     register-var: pb_right_sleeve
+
   - new-image:
       mode: RGBA
       size: [128, 128]
       color: [0, 0, 0, 0]
-    register-var: output
   - paste:
-      target: $output
       source: $pa_left_sleeve
       position: [12, 9]
-    register-var: output
   - paste:
-      target: $output
       source: $pa_right_sleeve
       position: [39, 9]
-    register-var: output
   - paste:
-      target: $output
       source: $pa_shirt
       position: [20, 4]
-    register-var: output
   - paste:
-      target: $output
       source: $pa_short
       position: [15, 54]
-    register-var: output
   - paste:
-      target: $output
       source: $pa_socks
       position: [39, 85]
-    register-var: output
   - paste:
-      target: $output
       source: $pa_socks
       position: [14, 85]
-    register-var: output
   - paste:
-      target: $output
       source: $pb_left_sleeve
       position: [76, 9]
-    register-var: output
   - paste:
-      target: $output
       source: $pb_right_sleeve
       position: [103, 9]
-    register-var: output
   - paste:
-      target: $output
       source: $pb_shirt
       position: [84, 4]
-    register-var: output
   - paste:
-      target: $output
       source: $pb_short
       position: [80, 54]
-    register-var: output
   - paste:
-      target: $output
       source: $pb_socks
       position: [103, 85]
-    register-var: output
   - paste:
-      target: $output
       source: $pb_socks
       position: [78, 85]
     register-var: output
+
   - load-image:
       path: resources/new_style_kit_2d_128x128.png
     register-var: mask
@@ -199,9 +151,7 @@ commands:
       background: $mask
       mask: $mask
       mask-mode: alpha
-    register-var: output
   - composite:
-      foreground: $output
       background: $mask
       mask: $mask
       mask-mode: grayscale
