@@ -11,4 +11,7 @@ class NewImageCommand(ImageCommand):
         mode = options.get("mode")
         if not isinstance(mode, str):
             raise CommandError("new-image mode must be a string")
-        return Image.new(mode=mode, size=as_int_tuple(options.get("size"), 2, "new-image size"), color=options.get("color"))
+        color = options.get("color")
+        if isinstance(color, list):
+            color = tuple(color)
+        return Image.new(mode=mode, size=as_int_tuple(options.get("size"), 2, "new-image size"), color=color)
