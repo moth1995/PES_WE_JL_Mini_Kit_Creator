@@ -30,8 +30,6 @@ COMMAND_PARAMETERS = {
     "composite": {"foreground", "background", "mask", "mask-mode"},
 }
 
-COMMANDS_REQUIRING_IMPLICIT_SOURCE = {"copy", "crop", "resize", "rotate", "flip"}
-
 
 def _as_int_tuple(value: Any, length: int, name: str) -> tuple:
     if not isinstance(value, (list, tuple)) or len(value) != length:
@@ -42,14 +40,13 @@ def _as_int_tuple(value: Any, length: int, name: str) -> tuple:
 
 
 def _resampling(value: str | None):
-    value = value or "nearest"
     names = {"nearest": "NEAREST", "bilinear": "BILINEAR", "bicubic": "BICUBIC", "lanczos": "LANCZOS"}
+    value = value or "nearest"
     try:
         name = names[value.lower()]
     except (AttributeError, KeyError) as exc:
         raise TemplateError(f"Unsupported resample value: {value}") from exc
-    resampling = getattr(Image, "Resampling", Image)
-    return getattr(resampling, name)
+    return getattr(getattr(Image, "Resampling", Image), name)
 
 
 def _reference(value: Any, variables: Mapping[str, Any], name: str) -> Any:
@@ -77,7 +74,7 @@ def _resource_path(root: Path, relative_path: str) -> Path:
     return candidate
 
 
-def _copy_image(source: Image.Image, **_: Any) -> Image.Image:
+def _copy(source: Image.Image, **_: Any) -> Image.Image:
     return source.copy()
 
 
@@ -127,12 +124,11 @@ def _paste(*, target: Image.Image, source: Image.Image, position: Any, mask: Ima
 def _composite(*, foreground: Image.Image, background: Image.Image, mask: Image.Image, mask_mode: str = "alpha", **_: Any) -> Image.Image:
     if mask_mode not in MASK_MODES:
         raise TemplateError("composite mask-mode must be alpha or grayscale")
-    prepared_mask = mask.convert("L") if mask_mode == "grayscale" else mask
-    return Image.composite(foreground, background, prepared_mask)
+    return Image.composite(foreground, background, mask.convert("L") if mask_mode == "grayscale" else mask)
 
 
 HANDLERS = {
-    "copy": _copy_image,
+    "copy": _copy,
     "new-image": _new_image,
     "load-image": _load_image,
     "crop": _crop,
@@ -144,58 +140,79 @@ HANDLERS = {
 }
 
 
-def _command_options(name: str, raw_options: Any, location: str) -> dict:
-    if raw_options is None:
-        raw_options = {}
-    if not isinstance(raw_options, dict):
-        raise TemplateError(f"{location}.{name} must contain an options mapping")
-    unknown = set(raw_options) - COMMAND_PARAMETERS[name]
-    if unknown:
-        raise TemplateError(f"{location}.{name} has unsupported parameters: {', '.join(sorted(unknown))}")
-    return dict(raw_options)
-
-
-def _expand_pipeline_item(item: Any, location: str) -> list[tuple[str, dict] | tuple[str, str]]:
-    """Expand one YAML list item into ordered commands and registration operations.
-
-    The preferred syntax is intentionally compact and preserves YAML mapping order:
-
-        - resize:
-            source: $pa
-            size: [512, 256]
-          register-var: pa
-          crop:
-            box: [40, 0, 154, 143]
-
-    ``register-var`` is its own operation. It stores the output of the immediately
-    preceding command, and a missing ``source`` uses that previous output.
-    """
+def _normalize_command(item: Any, location: str) -> tuple[str, dict, str | None]:
+    """Return command name, options, and the standalone registration name."""
     if not isinstance(item, dict) or not item:
         raise TemplateError(f"{location} must be a non-empty mapping")
 
-    if "command" in item:
+    # Preferred syntax: ``- resize: {...}`` followed by ``register-var: name``.
+    if "command" not in item:
+        commands = [(key, value) for key, value in item.items() if key != "register-var"]
+        if len(commands) != 1:
+            raise TemplateError(f"{location} must contain exactly one command key")
+        name, options = commands[0]
+        register_var = item.get("register-var")
+    else:
         name = item.get("command")
-        if name not in COMMAND_PARAMETERS:
-            raise TemplateError(f"{location} uses unsupported command: {name}")
         options = {key: value for key, value in item.items() if key not in {"command", "register-var"}}
-        operations: list[tuple[str, dict] | tuple[str, str]] = [(name, _command_options(name, options, location))]
-        if "register-var" in item:
-            operations.append(("register", item["register-var"]))
-        return operations
+        register_var = item.get("register-var")
 
-    operations = []
-    for key, value in item.items():
-        if key == "register-var":
-            if not isinstance(value, str) or not REFERENCE_RE.match("$" + value):
-                raise TemplateError(f"{location}.register-var must be a valid variable name")
-            operations.append(("register", value))
-            continue
-        if key not in COMMAND_PARAMETERS:
-            raise TemplateError(f"{location} uses unsupported command or field: {key}")
-        operations.append((key, _command_options(key, value, location)))
-    if not operations:
-        raise TemplateError(f"{location} does not contain a command")
-    return operations
+    if name not in COMMAND_PARAMETERS:
+        raise TemplateError(f"{location} uses unsupported command: {name}")
+    if options is None:
+        options = {}
+    if not isinstance(options, dict):
+        raise TemplateError(f"{location}.{name} must contain an options mapping")
+    unknown = set(options) - COMMAND_PARAMETERS[name]
+    if unknown:
+        raise TemplateError(f"{location}.{name} has unsupported parameters: {', '.join(sorted(unknown))}")
+    if register_var is not None and (not isinstance(register_var, str) or not REFERENCE_RE.match("$" + register_var)):
+        raise TemplateError(f"{location}.register-var must be a valid variable name")
+    return name, dict(options), register_var
+
+
+def _validate_commands(template: dict, source: str) -> None:
+    registered = set(RUNTIME_VARIABLES)
+    has_last_output = False
+    for index, item in enumerate(template["commands"]):
+        location = f"{source}.commands[{index}]"
+        name, options, register_var = _normalize_command(item, location)
+
+        for key, value in options.items():
+            if isinstance(value, str) and value.startswith("$"):
+                match = REFERENCE_RE.match(value)
+                if not match:
+                    raise TemplateError(f"{location}.{name}.{key} is not a valid variable reference")
+                if match.group(1) not in registered:
+                    raise TemplateError(f"{location}.{name}.{key} references undefined variable {value}")
+
+        if name == "flip" and options.get("direction") not in FLIP_DIRECTIONS:
+            raise TemplateError(f"{location}.flip.direction must be horizontal or vertical")
+        if name == "composite" and options.get("mask-mode", "alpha") not in MASK_MODES:
+            raise TemplateError(f"{location}.composite.mask-mode must be alpha or grayscale")
+
+        # Every command may omit its input references. In that case execution uses
+        # the previous command output. The first command must provide its inputs.
+        implicit_keys = {
+            "copy": ("source",),
+            "crop": ("source",),
+            "resize": ("source",),
+            "rotate": ("source",),
+            "flip": ("source",),
+            "paste": ("target", "source"),
+            "composite": ("foreground", "background", "mask"),
+        }.get(name, ())
+        if not has_last_output and any(key not in options for key in implicit_keys):
+            missing = ", ".join(key for key in implicit_keys if key not in options)
+            raise TemplateError(f"{location}.{name} requires {missing}; no previous command output exists")
+
+        has_last_output = True
+        if register_var is not None:
+            registered.add(register_var)
+
+    result_var = template["result-var"]
+    if result_var not in registered:
+        raise TemplateError(f"{source}.result-var ${result_var} is never registered")
 
 
 class TemplateEngine:
@@ -232,68 +249,57 @@ class TemplateEngine:
             raise TemplateError(f"{source}.id must be a non-empty string")
         if not isinstance(template["commands"], list) or not template["commands"]:
             raise TemplateError(f"{source}.commands must be a non-empty list")
-        registered = set(RUNTIME_VARIABLES)
         result_var = template["result-var"]
         if not isinstance(result_var, str) or not REFERENCE_RE.match("$" + result_var):
             raise TemplateError(f"{source}.result-var must be a valid variable name")
-
-        last_output_exists = False
-        for index, item in enumerate(template["commands"]):
-            location = f"{source}.commands[{index}]"
-            for operation in _expand_pipeline_item(item, location):
-                if operation[0] == "register":
-                    if not last_output_exists:
-                        raise TemplateError(f"{location}.register-var has no preceding command output to register")
-                    registered.add(operation[1])
-                    continue
-                name, command = operation
-                for key, value in command.items():
-                    if isinstance(value, str) and value.startswith("$"):
-                        match = REFERENCE_RE.match(value)
-                        if not match:
-                            raise TemplateError(f"{location}.{name}.{key} is not a valid variable reference")
-                        if match.group(1) not in registered:
-                            raise TemplateError(f"{location}.{name}.{key} references undefined variable {value}")
-                if name in COMMANDS_REQUIRING_IMPLICIT_SOURCE and "source" not in command and not last_output_exists:
-                    raise TemplateError(f"{location}.{name} needs source because no previous command output exists")
-                if name == "flip" and command.get("direction") not in FLIP_DIRECTIONS:
-                    raise TemplateError(f"{location}.flip.direction must be horizontal or vertical")
-                if name == "composite" and command.get("mask-mode", "alpha") not in MASK_MODES:
-                    raise TemplateError(f"{location}.composite.mask-mode must be alpha or grayscale")
-                last_output_exists = True
-        if result_var not in registered:
-            raise TemplateError(f"{source}.result-var ${result_var} is never registered")
+        _validate_commands(template, source)
 
     def execute(self, template_id: str, pa: Image.Image, pb: Image.Image, output_dir: str = "") -> Image.Image:
         try:
             template = self.templates[template_id]
         except KeyError as exc:
             raise TemplateError(f"Unknown conversion template: {template_id}") from exc
+
         variables: Dict[str, Any] = {"pa": pa, "pb": pb, "output_dir": output_dir}
         last_output: Any = None
         for index, item in enumerate(template["commands"]):
             location = f"commands[{index}]"
-            for operation in _expand_pipeline_item(item, location):
-                if operation[0] == "register":
-                    if last_output is None:
-                        raise TemplateError(f"{location}.register-var has no preceding command output to register")
-                    variables[operation[1]] = last_output
-                    continue
+            name, options, register_var = _normalize_command(item, location)
+            args: Dict[str, Any] = {}
+            for key, value in options.items():
+                if isinstance(value, str) and value.startswith("$"):
+                    args[key.replace("-", "_")] = _reference(value, variables, f"{location}.{name}.{key}")
+                else:
+                    args[key.replace("-", "_")] = value
 
-                name, command = operation
-                args: Dict[str, Any] = {}
-                for key, value in command.items():
-                    if isinstance(value, str) and value.startswith("$"):
-                        args[key.replace("-", "_")] = _reference(value, variables, f"{location}.{name}.{key}")
-                    else:
-                        args[key.replace("-", "_")] = value
-                if name in COMMANDS_REQUIRING_IMPLICIT_SOURCE and "source" not in args:
-                    args["source"] = last_output
-                if name == "paste" and "target" not in args:
+            # Any omitted input is the most recent command output. A first-command
+            # omission is rejected instead of silently using runtime variables.
+            if name in {"copy", "crop", "resize", "rotate", "flip"} and "source" not in args:
+                if last_output is None:
+                    raise TemplateError(f"{location}.{name} has no source and no previous command output")
+                args["source"] = last_output
+            elif name == "paste":
+                if "target" not in args:
+                    if last_output is None:
+                        raise TemplateError(f"{location}.paste has no target and no previous command output")
                     args["target"] = last_output
-                if name == "load-image":
-                    args["path"] = _resource_path(self.resource_root, args["path"])
-                last_output = HANDLERS[name](**args)
+                if "source" not in args:
+                    if last_output is None:
+                        raise TemplateError(f"{location}.paste has no source and no previous command output")
+                    args["source"] = last_output
+            elif name == "composite":
+                for key in ("foreground", "background", "mask"):
+                    if key not in args:
+                        if last_output is None:
+                            raise TemplateError(f"{location}.composite has no {key} and no previous command output")
+                        args[key] = last_output
+
+            if name == "load-image":
+                args["path"] = _resource_path(self.resource_root, args["path"])
+            last_output = HANDLERS[name](**args)
+            if register_var is not None:
+                variables[register_var] = last_output
+
         return variables[template["result-var"]]
 
     def choices(self) -> list[tuple[str, str]]:
