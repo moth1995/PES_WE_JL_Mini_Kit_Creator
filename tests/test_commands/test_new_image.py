@@ -46,6 +46,14 @@ class TestNewImageCommand:
         )
         assert result.mode == "L"
 
+    def test_color_as_list_is_accepted(self):
+        result = self.cmd.execute(
+            {"mode": "RGBA", "size": [4, 4], "color": [0, 0, 0, 0]},
+            last_output=None,
+            resource_root=ROOT,
+        )
+        assert result.mode == "RGBA"
+
     def test_color_defaults_to_none(self):
         result = self.cmd.execute(
             {"mode": "RGB", "size": [4, 4]},
