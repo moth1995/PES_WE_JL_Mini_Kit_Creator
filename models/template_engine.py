@@ -19,16 +19,18 @@ MASK_MODES = {"alpha", "grayscale"}
 FLIP_DIRECTIONS = {"horizontal", "vertical"}
 
 COMMAND_PARAMETERS = {
-    "copy": {"source", "register-var"},
-    "new-image": {"mode", "size", "color", "register-var"},
-    "load-image": {"path", "register-var"},
-    "crop": {"source", "box", "register-var"},
-    "resize": {"source", "size", "resample", "register-var"},
-    "rotate": {"source", "angle", "expand", "resample", "fill-color", "register-var"},
-    "flip": {"source", "direction", "register-var"},
-    "paste": {"target", "source", "position", "mask", "register-var"},
-    "composite": {"foreground", "background", "mask", "mask-mode", "register-var"},
+    "copy": {"source"},
+    "new-image": {"mode", "size", "color"},
+    "load-image": {"path"},
+    "crop": {"source", "box"},
+    "resize": {"source", "size", "resample"},
+    "rotate": {"source", "angle", "expand", "resample", "fill-color"},
+    "flip": {"source", "direction"},
+    "paste": {"target", "source", "position", "mask"},
+    "composite": {"foreground", "background", "mask", "mask-mode"},
 }
+
+COMMANDS_REQUIRING_IMPLICIT_SOURCE = {"copy", "crop", "resize", "rotate", "flip"}
 
 
 def _as_int_tuple(value: Any, length: int, name: str) -> tuple:
@@ -142,25 +144,58 @@ HANDLERS = {
 }
 
 
-def _normalize_command(command: Any, location: str) -> tuple[str, dict]:
-    """Accept the concise ``- paste:`` form and the legacy ``command: paste`` form."""
-    if not isinstance(command, dict):
-        raise TemplateError(f"{location} must be a mapping")
+def _command_options(name: str, raw_options: Any, location: str) -> dict:
+    if raw_options is None:
+        raw_options = {}
+    if not isinstance(raw_options, dict):
+        raise TemplateError(f"{location}.{name} must contain an options mapping")
+    unknown = set(raw_options) - COMMAND_PARAMETERS[name]
+    if unknown:
+        raise TemplateError(f"{location}.{name} has unsupported parameters: {', '.join(sorted(unknown))}")
+    return dict(raw_options)
 
-    if "command" in command:
-        name = command.get("command")
-        options = {key: value for key, value in command.items() if key != "command"}
-    elif len(command) == 1:
-        name, options = next(iter(command.items()))
-        options = {} if options is None else options
-        if not isinstance(options, dict):
-            raise TemplateError(f"{location}.{name} must contain an options mapping")
-    else:
-        raise TemplateError(f"{location} must use exactly one command key, such as '- paste:'")
 
-    if name not in COMMAND_PARAMETERS:
-        raise TemplateError(f"{location} uses unsupported command: {name}")
-    return name, options
+def _expand_pipeline_item(item: Any, location: str) -> list[tuple[str, dict] | tuple[str, str]]:
+    """Expand one YAML list item into ordered commands and registration operations.
+
+    The preferred syntax is intentionally compact and preserves YAML mapping order:
+
+        - resize:
+            source: $pa
+            size: [512, 256]
+          register-var: pa
+          crop:
+            box: [40, 0, 154, 143]
+
+    ``register-var`` is its own operation. It stores the output of the immediately
+    preceding command, and a missing ``source`` uses that previous output.
+    """
+    if not isinstance(item, dict) or not item:
+        raise TemplateError(f"{location} must be a non-empty mapping")
+
+    if "command" in item:
+        name = item.get("command")
+        if name not in COMMAND_PARAMETERS:
+            raise TemplateError(f"{location} uses unsupported command: {name}")
+        options = {key: value for key, value in item.items() if key not in {"command", "register-var"}}
+        operations: list[tuple[str, dict] | tuple[str, str]] = [(name, _command_options(name, options, location))]
+        if "register-var" in item:
+            operations.append(("register", item["register-var"]))
+        return operations
+
+    operations = []
+    for key, value in item.items():
+        if key == "register-var":
+            if not isinstance(value, str) or not REFERENCE_RE.match("$" + value):
+                raise TemplateError(f"{location}.register-var must be a valid variable name")
+            operations.append(("register", value))
+            continue
+        if key not in COMMAND_PARAMETERS:
+            raise TemplateError(f"{location} uses unsupported command or field: {key}")
+        operations.append((key, _command_options(key, value, location)))
+    if not operations:
+        raise TemplateError(f"{location} does not contain a command")
+    return operations
 
 
 class TemplateEngine:
@@ -202,27 +237,30 @@ class TemplateEngine:
         if not isinstance(result_var, str) or not REFERENCE_RE.match("$" + result_var):
             raise TemplateError(f"{source}.result-var must be a valid variable name")
 
-        for index, raw_command in enumerate(template["commands"]):
+        last_output_exists = False
+        for index, item in enumerate(template["commands"]):
             location = f"{source}.commands[{index}]"
-            name, command = _normalize_command(raw_command, location)
-            unknown = set(command) - COMMAND_PARAMETERS[name]
-            if unknown:
-                raise TemplateError(f"{location}.{name} has unsupported parameters: {', '.join(sorted(unknown))}")
-            register_var = command.get("register-var")
-            if not isinstance(register_var, str) or not REFERENCE_RE.match("$" + register_var):
-                raise TemplateError(f"{location}.{name}.register-var must be a valid variable name")
-            for key, value in command.items():
-                if isinstance(value, str) and value.startswith("$"):
-                    match = REFERENCE_RE.match(value)
-                    if not match:
-                        raise TemplateError(f"{location}.{name}.{key} is not a valid variable reference")
-                    if match.group(1) not in registered:
-                        raise TemplateError(f"{location}.{name}.{key} references undefined variable {value}")
-            if name == "flip" and command.get("direction") not in FLIP_DIRECTIONS:
-                raise TemplateError(f"{location}.flip.direction must be horizontal or vertical")
-            if name == "composite" and command.get("mask-mode", "alpha") not in MASK_MODES:
-                raise TemplateError(f"{location}.composite.mask-mode must be alpha or grayscale")
-            registered.add(register_var)
+            for operation in _expand_pipeline_item(item, location):
+                if operation[0] == "register":
+                    if not last_output_exists:
+                        raise TemplateError(f"{location}.register-var has no preceding command output to register")
+                    registered.add(operation[1])
+                    continue
+                name, command = operation
+                for key, value in command.items():
+                    if isinstance(value, str) and value.startswith("$"):
+                        match = REFERENCE_RE.match(value)
+                        if not match:
+                            raise TemplateError(f"{location}.{name}.{key} is not a valid variable reference")
+                        if match.group(1) not in registered:
+                            raise TemplateError(f"{location}.{name}.{key} references undefined variable {value}")
+                if name in COMMANDS_REQUIRING_IMPLICIT_SOURCE and "source" not in command and not last_output_exists:
+                    raise TemplateError(f"{location}.{name} needs source because no previous command output exists")
+                if name == "flip" and command.get("direction") not in FLIP_DIRECTIONS:
+                    raise TemplateError(f"{location}.flip.direction must be horizontal or vertical")
+                if name == "composite" and command.get("mask-mode", "alpha") not in MASK_MODES:
+                    raise TemplateError(f"{location}.composite.mask-mode must be alpha or grayscale")
+                last_output_exists = True
         if result_var not in registered:
             raise TemplateError(f"{source}.result-var ${result_var} is never registered")
 
@@ -232,19 +270,30 @@ class TemplateEngine:
         except KeyError as exc:
             raise TemplateError(f"Unknown conversion template: {template_id}") from exc
         variables: Dict[str, Any] = {"pa": pa, "pb": pb, "output_dir": output_dir}
-        for index, raw_command in enumerate(template["commands"]):
-            name, command = _normalize_command(raw_command, f"commands[{index}]")
-            args: Dict[str, Any] = {}
-            for key, value in command.items():
-                if key == "register-var":
+        last_output: Any = None
+        for index, item in enumerate(template["commands"]):
+            location = f"commands[{index}]"
+            for operation in _expand_pipeline_item(item, location):
+                if operation[0] == "register":
+                    if last_output is None:
+                        raise TemplateError(f"{location}.register-var has no preceding command output to register")
+                    variables[operation[1]] = last_output
                     continue
-                if isinstance(value, str) and value.startswith("$"):
-                    args[key.replace("-", "_")] = _reference(value, variables, f"commands[{index}].{name}.{key}")
-                else:
-                    args[key.replace("-", "_")] = value
-            if name == "load-image":
-                args["path"] = _resource_path(self.resource_root, args["path"])
-            variables[command["register-var"]] = HANDLERS[name](**args)
+
+                name, command = operation
+                args: Dict[str, Any] = {}
+                for key, value in command.items():
+                    if isinstance(value, str) and value.startswith("$"):
+                        args[key.replace("-", "_")] = _reference(value, variables, f"{location}.{name}.{key}")
+                    else:
+                        args[key.replace("-", "_")] = value
+                if name in COMMANDS_REQUIRING_IMPLICIT_SOURCE and "source" not in args:
+                    args["source"] = last_output
+                if name == "paste" and "target" not in args:
+                    args["target"] = last_output
+                if name == "load-image":
+                    args["path"] = _resource_path(self.resource_root, args["path"])
+                last_output = HANDLERS[name](**args)
         return variables[template["result-var"]]
 
     def choices(self) -> list[tuple[str, str]]:
